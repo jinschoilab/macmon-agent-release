@@ -24,8 +24,11 @@ interval = 5
 # hostname = 내PC이름
 EOF
 
-# 3. 실행
+# 3. 실행 (설정 파일 사용)
 ./macmon-agent
+
+# 또는 커맨드 라인으로 바로 지정
+./macmon-agent -server http://서버IP:6600 -interval 5 -hostname 내PC이름
 ```
 
 ---
@@ -48,8 +51,11 @@ interval = 5
 # hostname = 내PC이름
 EOF
 
-# 실행 (amd64 예시)
+# 실행 (설정 파일 사용)
 ./macmon-agent-linux-amd64
+
+# 또는 커맨드 라인으로 바로 지정
+./macmon-agent-linux-amd64 -server http://서버IP:6600 -interval 5 -hostname 내서버이름
 ```
 
 ---
