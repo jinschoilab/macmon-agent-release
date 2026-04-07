@@ -83,6 +83,23 @@ CLI 옵션은 설정 파일보다 우선합니다.
 
 ---
 
+## Java 프로세스 모니터링
+
+Java 힙/GC 정보 수집을 위해 `jps`, `jstat`이 필요합니다 (JDK 포함).
+
+**Linux — JDK가 없는 경우 (JRE만 설치된 경우):**
+```bash
+# Java 17 기준
+sudo apt install -y openjdk-17-jdk-headless
+
+# 설치 확인
+jps -l
+```
+
+JRE(`java`)만 있고 JDK(`jps`, `jstat`)가 없으면 Java 모니터링 항목은 표시되지 않습니다.
+
+---
+
 ## macOS GPU/ANE 수집 (Apple Silicon)
 
 powermetrics 실행 권한이 필요합니다. `/etc/sudoers`에 추가:
