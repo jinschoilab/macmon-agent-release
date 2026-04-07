@@ -14,7 +14,7 @@ macOS / Linux 시스템 모니터링 에이전트
 
 ```bash
 # 1. 바이너리 다운로드
-curl -LO https://github.com/jinschoilab/macmon-agent-release/raw/main/macmon-agent
+curl -LO https://raw.githubusercontent.com/jinschoilab/macmon-agent-release/main/macmon-agent
 chmod +x macmon-agent
 
 # 2. 설정 파일 생성
@@ -37,11 +37,11 @@ EOF
 
 ```bash
 # amd64 (x86_64)
-curl -LO https://github.com/jinschoilab/macmon-agent-release/raw/main/macmon-agent-linux-amd64
+curl -LO https://raw.githubusercontent.com/jinschoilab/macmon-agent-release/main/macmon-agent-linux-amd64
 chmod +x macmon-agent-linux-amd64
 
 # arm64 (aarch64)
-curl -LO https://github.com/jinschoilab/macmon-agent-release/raw/main/macmon-agent-linux-arm64
+curl -LO https://raw.githubusercontent.com/jinschoilab/macmon-agent-release/main/macmon-agent-linux-arm64
 chmod +x macmon-agent-linux-arm64
 
 # 설정 파일 생성
