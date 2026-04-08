@@ -8,6 +8,8 @@ macOS / Linux 시스템 모니터링 에이전트
 | `macmon-agent-legacy` | macOS Intel 전용 (구형 Mac) | macOS 10.13 (High Sierra) 이상 |
 | `macmon-agent-linux-amd64` | Linux x86_64 | — |
 | `macmon-agent-linux-arm64` | Linux aarch64 (ARM) | — |
+| `macmon-agent-windows-amd64.exe` | Windows x86_64 | Windows 10 이상 |
+| `macmon-agent-windows-arm64.exe` | Windows ARM64 | Windows 10 이상 |
 
 > **구형 인텔 Mac 사용자** (macOS 10.13 ~ 11.x): `macmon-agent` 대신 `macmon-agent-legacy`를 사용하세요.
 > Legacy 버전은 클라우드 메타데이터(AWS/GCP/Azure 등) 감지를 제외한 나머지 기능은 동일합니다.
