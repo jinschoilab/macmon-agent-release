@@ -44,6 +44,30 @@ EOF
 
 ---
 
+## Windows
+
+```powershell
+# 1. 바이너리 다운로드 (PowerShell)
+Invoke-WebRequest -Uri https://raw.githubusercontent.com/jinschoilab/macmon-agent-release/main/macmon-agent-windows-amd64.exe -OutFile macmon-agent.exe
+
+# 2. 설정 파일 생성
+@"
+server   = http://서버IP:6600
+interval = 5
+# hostname = 내PC이름
+"@ | Out-File -Encoding utf8 macmon-agent.conf
+
+# 3. 실행
+.\macmon-agent.exe
+
+# 또는 커맨드 라인으로 바로 지정
+.\macmon-agent.exe -server http://서버IP:6600 -interval 5 -hostname 내PC이름
+```
+
+> **참고**: Windows는 프로세스 CPU% 수집이 제한됩니다 (tasklist가 CPU% 미제공). 메모리 사용량은 정상 수집됩니다.
+
+---
+
 ## Linux
 
 ```bash
