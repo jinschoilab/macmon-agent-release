@@ -103,7 +103,9 @@ EOF
 server   = http://서버IP:6600   # 수집 서버 주소
 interval = 5                    # 수집 주기 (초)
 # hostname = 내PC이름           # 생략 시 OS 호스트명 사용
-# syslog = false                # 시스템 에러 로그 수집 비활성화 (기본: true)
+# syslog  = false               # 시스템 에러 로그 수집 비활성화 (기본: true)
+# python  = true                # Python 프로세스 수집 활성화 (기본: false)
+# k8s     = true                # Kubernetes 파드 수집 활성화 (기본: false)
 ```
 
 | 옵션 | 기본값 | 설명 |
@@ -112,6 +114,10 @@ interval = 5                    # 수집 주기 (초)
 | `interval` | 5 | 수집 주기 (초) |
 | `hostname` | OS 호스트명 | 표시될 이름 |
 | `syslog` | true | 시스템 에러 로그 수집. `false`/`0`/`off`로 비활성화 |
+| `python` | false | Python 프로세스 수집. `true`/`1`/`on`으로 활성화 |
+| `k8s` | false | Kubernetes 파드 수집 (kubectl 필요). `true`/`1`/`on`으로 활성화 |
+
+> **Python/K8s 수집은 기본적으로 비활성화**되어 있습니다. 에이전트 부하를 줄이기 위해 필요한 경우에만 활성화하세요.
 
 ## CLI 옵션
 
@@ -121,6 +127,8 @@ interval = 5                    # 수집 주기 (초)
 | `-interval` | 5 | 수집 주기 (초) |
 | `-hostname` | OS 호스트명 | 표시될 이름 |
 | `-once` | — | 1회 수집 후 종료 |
+| `-python` | false | Python 프로세스 수집 활성화 |
+| `-k8s` | false | Kubernetes 파드 수집 활성화 |
 
 CLI 옵션은 설정 파일보다 우선합니다.
 
