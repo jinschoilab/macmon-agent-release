@@ -6,9 +6,11 @@ macOS / Linux 시스템 모니터링 에이전트
 |------|------|-----------|
 | `macmon-agent` | macOS Universal (Apple Silicon + Intel) | macOS 12.0 (Monterey) 이상 |
 | `macmon-agent-legacy` | macOS Intel 전용 (구형 Mac) | macOS 10.13 (High Sierra) 이상 |
-| `macmon-agent-linux-amd64` | Linux x86_64 | — |
+| `macmon-agent-linux-amd64` | Linux x86_64 (64bit) | — |
+| `macmon-agent-linux-386` | Linux x86 (32bit) | — |
 | `macmon-agent-linux-arm64` | Linux aarch64 (ARM) | — |
-| `macmon-agent-windows-amd64.exe` | Windows x86_64 | Windows 10 이상 |
+| `macmon-agent-windows-amd64.exe` | Windows x86_64 (64bit) | Windows 10 이상 |
+| `macmon-agent-windows-386.exe` | Windows x86 (32bit) | Windows 10 이상 |
 | `macmon-agent-windows-arm64.exe` | Windows ARM64 | Windows 10 이상 |
 
 > **구형 인텔 Mac 사용자** (macOS 10.13 ~ 11.x): `macmon-agent` 대신 `macmon-agent-legacy`를 사용하세요.
