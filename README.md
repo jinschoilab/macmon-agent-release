@@ -8,7 +8,8 @@ macOS / Linux 시스템 모니터링 에이전트
 | `macmon-agent-legacy` | macOS Intel 전용 (구형 Mac) | macOS 10.13 (High Sierra) 이상 |
 | `macmon-agent-linux-amd64` | Linux x86_64 (64bit) | — |
 | `macmon-agent-linux-386` | Linux x86 (32bit) | — |
-| `macmon-agent-linux-arm64` | Linux aarch64 (ARM) | — |
+| `macmon-agent-linux-arm64` | Linux aarch64 (ARM64) — Raspberry Pi 4/5 (64bit OS) | — |
+| `macmon-agent-linux-arm` | Linux armhf (ARM32) — Raspberry Pi 2/3/4 (32bit OS), Zero 2 W | — |
 | `macmon-agent-windows-amd64.exe` | Windows x86_64 (64bit) | Windows 10 이상 |
 | `macmon-agent-windows-386.exe` | Windows x86 (32bit) | Windows 10 이상 |
 | `macmon-agent-windows-arm64.exe` | Windows ARM64 | Windows 10 이상 |
@@ -77,9 +78,13 @@ interval = 5
 curl -LO https://raw.githubusercontent.com/jinschoilab/macmon-agent-release/main/macmon-agent-linux-amd64
 chmod +x macmon-agent-linux-amd64
 
-# arm64 (aarch64)
+# arm64 (aarch64) — Pi 4/5 64bit OS, Pi Zero 2 W
 curl -LO https://raw.githubusercontent.com/jinschoilab/macmon-agent-release/main/macmon-agent-linux-arm64
 chmod +x macmon-agent-linux-arm64
+
+# arm (armhf) — Pi 2/3/4 32bit OS, Pi Zero 2 W 32bit
+curl -LO https://raw.githubusercontent.com/jinschoilab/macmon-agent-release/main/macmon-agent-linux-arm
+chmod +x macmon-agent-linux-arm
 
 # 설정 파일 생성
 cat > macmon-agent.conf << 'EOF'
