@@ -13,6 +13,8 @@ macOS / Linux 시스템 모니터링 에이전트
 | `macmon-agent-windows-amd64.exe` | Windows x86_64 (64bit) | Windows 10 이상 |
 | `macmon-agent-windows-386.exe` | Windows x86 (32bit) | Windows 10 이상 |
 | `macmon-agent-windows-arm64.exe` | Windows ARM64 | Windows 10 이상 |
+| `macmon-agent-windows7-amd64.exe` | Windows 7/8/8.1 x86_64 (64bit) | Windows 7 이상 |
+| `macmon-agent-windows7-386.exe` | Windows 7/8/8.1 x86 (32bit) | Windows 7 이상 |
 
 > **구형 인텔 Mac 사용자** (macOS 10.13 ~ 11.x): `macmon-agent` 대신 `macmon-agent-legacy`를 사용하세요.
 > Legacy 버전은 클라우드 메타데이터(AWS/GCP/Azure 등) 감지를 제외한 나머지 기능은 동일합니다.
@@ -68,6 +70,36 @@ interval = 5
 ```
 
 > **참고**: Windows는 프로세스 CPU% 수집이 제한됩니다 (tasklist가 CPU% 미제공). 메모리 사용량은 정상 수집됩니다.
+
+---
+
+## Windows 7 / 8 / 8.1
+
+Windows 10 미만 구형 환경용 별도 빌드입니다.
+
+```powershell
+# 64bit
+Invoke-WebRequest -Uri https://raw.githubusercontent.com/jinschoilab/macmon-agent-release/main/macmon-agent-windows7-amd64.exe -OutFile macmon-agent.exe
+
+# 32bit
+Invoke-WebRequest -Uri https://raw.githubusercontent.com/jinschoilab/macmon-agent-release/main/macmon-agent-windows7-386.exe -OutFile macmon-agent.exe
+
+# 설정 파일 생성
+@"
+server   = http://서버IP:6600
+interval = 5
+# hostname = 내PC이름
+"@ | Out-File -Encoding utf8 macmon-agent.conf
+
+# 실행
+.\macmon-agent.exe
+```
+
+**Win7 버전 제약사항:**
+- 수집 항목: CPU / 메모리 / 디스크 / 네트워크 I/O / 프로세스 Top10
+- 프로세스 CPU% 미수집 (tasklist 미지원)
+- Java / Python / K8s / 배터리 / 시스템 로그 미수집
+- 설정 파일 옵션: `server`, `interval`, `hostname` 만 지원
 
 ---
 
