@@ -141,10 +141,12 @@ EOF
 ```
 server   = http://서버IP:6600   # 수집 서버 주소
 interval = 5                    # 수집 주기 (초)
-# hostname = 내PC이름           # 생략 시 OS 호스트명 사용
-# syslog  = false               # 시스템 에러 로그 수집 비활성화 (기본: true)
-# python  = true                # Python 프로세스 수집 활성화 (기본: false)
-# k8s     = true                # Kubernetes 파드 수집 활성화 (기본: false)
+# hostname          = 내PC이름  # 생략 시 OS 호스트명 사용
+# collect.syslog    = false     # 시스템 에러 로그 수집 비활성화 (기본: true)
+# collect.java      = true      # Java 프로세스 수집 활성화 (기본: false)
+# collect.python    = true      # Python 프로세스 수집 활성화 (기본: false)
+# collect.k8s       = true      # Kubernetes 파드 수집 활성화 (기본: false)
+# collect.springboot = true     # Spring Boot Actuator 수집 활성화 (기본: false)
 ```
 
 | 옵션 | 기본값 | 설명 |
@@ -152,11 +154,15 @@ interval = 5                    # 수집 주기 (초)
 | `server` | http://localhost:6600 | 수집 서버 주소 |
 | `interval` | 5 | 수집 주기 (초) |
 | `hostname` | OS 호스트명 | 표시될 이름 |
-| `syslog` | true | 시스템 에러 로그 수집. `false`/`0`/`off`로 비활성화 |
-| `python` | false | Python 프로세스 수집. `true`/`1`/`on`으로 활성화 |
-| `k8s` | false | Kubernetes 파드 수집 (kubectl 필요). `true`/`1`/`on`으로 활성화 |
+| `collect.syslog` | true | 시스템 에러 로그 수집. `false`/`0`/`off`로 비활성화 |
+| `collect.java` | false | Java 프로세스 수집. `true`/`1`/`on`으로 활성화 |
+| `collect.python` | false | Python 프로세스 수집. `true`/`1`/`on`으로 활성화 |
+| `collect.k8s` | false | Kubernetes 파드 수집 (kubectl 필요). `true`/`1`/`on`으로 활성화 |
+| `collect.springboot` | false | Spring Boot Actuator 수집. `true`/`1`/`on`으로 활성화 |
 
-> **Python/K8s 수집은 기본적으로 비활성화**되어 있습니다. 에이전트 부하를 줄이기 위해 필요한 경우에만 활성화하세요.
+> 기존 옵션명(`java`, `python`, `k8s`, `syslog`, `springboot.actuator`)도 하위호환으로 계속 동작합니다.
+
+> **collect.java/python/k8s/springboot 수집은 기본적으로 비활성화**되어 있습니다. 에이전트 부하를 줄이기 위해 필요한 경우에만 활성화하세요.
 
 ## CLI 옵션
 
