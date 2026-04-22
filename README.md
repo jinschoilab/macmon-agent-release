@@ -16,16 +16,19 @@ macOS / Linux 시스템 모니터링 에이전트
 | `macmon-agent-windows7-amd64.exe` | Windows 7/8/8.1 x86_64 (64bit) | Windows 7 이상 |
 | `macmon-agent-windows7-386.exe` | Windows 7/8/8.1 x86 (32bit) | Windows 7 이상 |
 
-### APM 에이전트 (선택, Linux 전용)
+### Go APM (Linux 전용, macmon-agent에 내장)
 
-Go 애플리케이션 무침투 트레이싱. eBPF uprobe로 HTTP/DB/goroutine을 고객 코드 수정 없이 관측합니다.
+Go 애플리케이션 무침투 트레이싱. eBPF uprobe로 HTTP/DB/goroutine을 코드 수정 없이 관측합니다.
+**별도 바이너리 아님** — `macmon-agent-linux-amd64`/`arm64`에 포함돼 있으며 설정에서 활성화만 하면 됩니다:
 
-| 파일 | 대상 | 요구사항 |
-|------|------|----------|
-| `macmon-go-apm-linux-amd64` | Linux x86_64 — Go 앱 eBPF APM | 커널 4.14+, `CAP_BPF` 또는 root |
-| `macmon-go-apm-linux-arm64` | Linux aarch64 — Go 앱 eBPF APM | 커널 4.14+, `CAP_BPF` 또는 root |
+```
+# macmon-agent.conf
+apm.enabled = true
+# apm.bin     = /opt/myapp/server   # 비워두면 /proc 자동 탐색
+# apm.scan_interval = 15            # 초
+```
 
-> APM 에이전트는 `macmon-agent`와 **별개 프로세스**이며, 시스템 메트릭 에이전트와 함께 돌립니다. macOS/Windows는 eBPF 제약으로 지원하지 않습니다.
+요구사항: Linux 커널 4.14+, `CAP_BPF` 또는 root. macOS/Windows에서는 옵션을 켜둬도 자동 무시됩니다.
 
 > **구형 인텔 Mac 사용자** (macOS 10.13 ~ 11.x): `macmon-agent` 대신 `macmon-agent-legacy`를 사용하세요.
 > Legacy 버전은 클라우드 메타데이터(AWS/GCP/Azure 등) 감지를 제외한 나머지 기능은 동일합니다.
