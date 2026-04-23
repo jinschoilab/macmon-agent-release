@@ -43,7 +43,7 @@ collect.apm.go = true
 collect.apm.go.targets = /home/ubuntu/macmon/macmon-server-release/macmon-server
 collect.apm.go.exclude_paths = /api/traces
 ```
-`exclude_paths`가 루트 HTTP 경로 접두사를 매칭해 agent의 자기 POST를 export 단계에서 드롭 → 루프 차단. 다른 API(`/api/agents` 등) 트레이스는 정상.
+`exclude_paths`는 루트 HTTP 경로와 **정확 일치**하는 트랜잭션만 드롭하므로 `/api/traces` 하나만 넣어도 `/api/traces/stats`, `/api/traces/{id}` 같은 UI API는 정상 수집됨.
 
 둘 다 비워두면 APM은 동작하지 않습니다.
 
