@@ -37,6 +37,14 @@ collect.apm.go.exclude = macmon-server,macmon-collector,macmon-agent
 ```
 > `exclude`는 **basename 부분일치**. 빈 값이면 `/proc`의 모든 Go 바이너리 attach — 수집 서버(macmon-server/collector)를 절대 빼지 마세요. 자기참조 루프로 서버 과부하/OOM 발생합니다.
 
+**특수 케이스: macmon-server 자체를 관측하고 싶을 때**
+```
+collect.apm.go = true
+collect.apm.go.targets = /home/ubuntu/macmon/macmon-server-release/macmon-server
+collect.apm.go.exclude_paths = /api/traces
+```
+`exclude_paths`가 루트 HTTP 경로 접두사를 매칭해 agent의 자기 POST를 export 단계에서 드롭 → 루프 차단. 다른 API(`/api/agents` 등) 트레이스는 정상.
+
 둘 다 비워두면 APM은 동작하지 않습니다.
 
 요구사항: Linux 커널 4.14+, `CAP_BPF` 또는 root. macOS/Windows에서는 옵션을 켜둬도 자동 무시됩니다.
