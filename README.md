@@ -21,12 +21,23 @@ macOS / Linux 시스템 모니터링 에이전트
 Go 애플리케이션 무침투 트레이싱. eBPF uprobe로 HTTP/DB/goroutine을 코드 수정 없이 관측합니다.
 **별도 바이너리 아님** — `macmon-agent-linux-amd64`/`arm64`에 포함돼 있으며 설정에서 활성화만 하면 됩니다:
 
+두 가지 모드 중 하나로 설정합니다.
+
+**모드 1: 명시적 대상 지정 (whitelist, 권장)**
 ```
-# macmon-agent.conf
 collect.apm.go = true
-collect.apm.go.targets = /opt/myapp/server,/opt/another/app   # 관측 대상 Go 바이너리 (쉼표 구분)
+collect.apm.go.targets = /opt/myapp/server,/opt/another/app
 ```
-대상을 지정하지 않으면 APM은 동작하지 않습니다 (자기참조 루프 등 사고 방지 목적).
+
+**모드 2: 자동 탐지 + 제외 (blacklist)**
+```
+collect.apm.go = true
+collect.apm.go.auto = true
+collect.apm.go.exclude = macmon-server,macmon-collector,macmon-agent
+```
+> `exclude`는 **basename 부분일치**. 빈 값이면 `/proc`의 모든 Go 바이너리 attach — 수집 서버(macmon-server/collector)를 절대 빼지 마세요. 자기참조 루프로 서버 과부하/OOM 발생합니다.
+
+둘 다 비워두면 APM은 동작하지 않습니다.
 
 요구사항: Linux 커널 4.14+, `CAP_BPF` 또는 root. macOS/Windows에서는 옵션을 켜둬도 자동 무시됩니다.
 
