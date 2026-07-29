@@ -92,12 +92,12 @@ chmod +x /usr/local/bin/jattach
 
 **모드 1: 특정 PID 지정 (권장)**
 ```bash
-./macmon-java-attacher-linux-amd64 -pid <대상 JVM PID> -agent macmon-java-agent.jar -endpoint http://서버IP:8280
+./macmon-java-attacher-linux-amd64 -pid <대상 JVM PID> -agent macmon-java-agent.jar -endpoint http://서버IP:6600
 ```
 
 **모드 2: 자동 탐지 (`-pid`/`-listen` 둘 다 생략)**
 ```bash
-./macmon-java-attacher-linux-amd64 -agent macmon-java-agent.jar -endpoint http://서버IP:8280
+./macmon-java-attacher-linux-amd64 -agent macmon-java-agent.jar -endpoint http://서버IP:6600
 ```
 > 5초마다 `/proc`을 스캔해 발견되는 모든 Java 프로세스에 자동으로 attach합니다. Go APM의 `exclude` 같은 제외 목록은 아직 없어서 호스트의 모든 JVM에 다 붙습니다 — 여러 Java 프로세스가 도는 호스트에선 모드 1로 원하는 프로세스만 지정하는 걸 권장합니다.
 
@@ -111,7 +111,7 @@ JAVA_TOOL_OPTIONS="-javaagent:/path/to/macmon-java-agent.jar=socket=/tmp/macmon-
   <원래 실행 명령> &
 
 # 2. attacher를 -listen 모드로 실행 (숫자가 위 1번과 정확히 일치해야 함)
-./macmon-java-attacher-darwin-arm64 -listen 9999 -agent macmon-java-agent.jar -endpoint http://서버IP:8280
+./macmon-java-attacher-darwin-arm64 -listen 9999 -agent macmon-java-agent.jar -endpoint http://서버IP:6600
 ```
 
 **`-listen`은 정수(int) 플래그입니다** — 프로세스 이름 같은 문자열은 안 됩니다(`invalid value ... parse error`). 소켓 경로 `/tmp/macmon-java-<값>.sock`의 `<값>`이 1·2번 양쪽에서 같은 숫자면 되고, 실제 PID와 일치할 필요는 없습니다 — 대상을 특정할 목적이면 실제 PID(`ps -ef` 등으로 확인)를 쓰는 게 헷갈리지 않습니다.
