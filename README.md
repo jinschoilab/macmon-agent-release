@@ -54,6 +54,49 @@ collect.apm.go.exclude_paths = /api/traces
 
 ---
 
+### Java APM (Linux 전용, 별도 바이너리)
+
+실행 중인 Java 프로세스에 **재시작 없이** 동적으로 붙어(JVMTI Attach) HTTP/JDBC 트랜잭션을 추적합니다.
+Go APM과 달리 macmon-agent에 내장되어 있지 않습니다 — 아래 두 파일을 별도로 받아야 합니다.
+
+```bash
+curl -LO https://raw.githubusercontent.com/jinschoilab/macmon-agent-release/main/macmon-java-agent.jar
+curl -LO https://raw.githubusercontent.com/jinschoilab/macmon-agent-release/main/macmon-java-attacher-linux-amd64
+chmod +x macmon-java-attacher-linux-amd64
+```
+
+**사전 준비: `jattach` 설치 필요** — attacher가 PATH에서 `jattach`를 찾아 실행합니다(내장 아님).
+```bash
+# github.com/jattach/jattach 릴리스에서 다운로드하거나 소스 빌드 후 PATH에 추가
+curl -Lo /usr/local/bin/jattach https://github.com/jattach/jattach/releases/latest/download/jattach
+chmod +x /usr/local/bin/jattach
+```
+
+**모드 1: 특정 PID 지정 (권장)**
+```bash
+./macmon-java-attacher-linux-amd64 -pid <대상 JVM PID> -agent macmon-java-agent.jar -endpoint http://서버IP:8280
+```
+
+**모드 2: 자동 탐지 (`-pid`/`-listen` 둘 다 생략)**
+```bash
+./macmon-java-attacher-linux-amd64 -agent macmon-java-agent.jar -endpoint http://서버IP:8280
+```
+> 5초마다 `/proc`을 스캔해 발견되는 모든 Java 프로세스에 자동으로 attach합니다. Go APM의 `exclude` 같은 제외 목록은 아직 없어서 호스트의 모든 JVM에 다 붙습니다 — 여러 Java 프로세스가 도는 호스트에선 모드 1로 원하는 프로세스만 지정하는 걸 권장합니다.
+
+| 옵션 | 기본값 | 설명 |
+|------|--------|------|
+| `-pid` | — | 대상 JVM PID. 지정하면 jattach로 주입 후 소켓 수신 |
+| `-agent` | `macmon-java-agent.jar` | 주입할 에이전트 jar 경로 |
+| `-endpoint` | — | macmon-server 주소. 비우면 로컬 워터폴 출력만(서버 전송 안 함) |
+| `-sample` | 100 | 샘플링 비율 (1~100%) |
+| `-listen` | — | 테스트용 — jattach 없이 소켓 수신만 (Java를 `-javaagent:macmon-java-agent.jar=socket=...`로 직접 시작했을 때) |
+
+`attacher`는 스팬을 계속 수신·전달하는 **상시 프로세스**입니다 — nohup/systemd로 macmon-agent와 함께 계속 띄워두세요. 중간에 종료하면 그 시점부터 트레이스가 끊깁니다.
+
+요구사항: Linux, JDK(Attach API 포함 — JRE만 있으면 동작 안 함), `jattach` PATH 등록.
+
+---
+
 ## macOS
 
 ```bash
