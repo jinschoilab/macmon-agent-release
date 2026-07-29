@@ -106,15 +106,15 @@ chmod +x /usr/local/bin/jattach
 macOS는 `jattach`가 공식 지원되지 않아 **동적 attach(`-pid`) 불가** — 대신 대상 Java 프로세스를 **agent를 붙여서 재시작**하고, attacher는 소켓 수신만 합니다.
 
 ```bash
-# 1. 대상 프로세스를 agent 붙여서 재시작 (예: JAVA_TOOL_OPTIONS로 임시 지정)
-JAVA_TOOL_OPTIONS="-javaagent:/path/to/macmon-java-agent.jar=socket=/tmp/macmon-java-myapp.sock" \
+# 1. 대상 프로세스를 agent 붙여서 재시작 (소켓 이름의 숫자는 임의로 정해도 됨, 예: 9999)
+JAVA_TOOL_OPTIONS="-javaagent:/path/to/macmon-java-agent.jar=socket=/tmp/macmon-java-9999.sock" \
   <원래 실행 명령> &
 
-# 2. attacher를 -listen 모드로 실행 (소켓 이름이 위 1번과 정확히 일치해야 함)
-./macmon-java-attacher-darwin-arm64 -listen myapp -agent macmon-java-agent.jar -endpoint http://서버IP:8280
+# 2. attacher를 -listen 모드로 실행 (숫자가 위 1번과 정확히 일치해야 함)
+./macmon-java-attacher-darwin-arm64 -listen 9999 -agent macmon-java-agent.jar -endpoint http://서버IP:8280
 ```
 
-`-listen` 뒤 값(`myapp`)은 소켓 경로 `/tmp/macmon-java-<값>.sock`의 `<값>` 부분과 동일해야 하며, 실제 PID가 아니어도 됩니다(양쪽이 같은 문자열만 쓰면 됨).
+**`-listen`은 정수(int) 플래그입니다** — 프로세스 이름 같은 문자열은 안 됩니다(`invalid value ... parse error`). 소켓 경로 `/tmp/macmon-java-<값>.sock`의 `<값>`이 1·2번 양쪽에서 같은 숫자면 되고, 실제 PID와 일치할 필요는 없습니다 — 대상을 특정할 목적이면 실제 PID(`ps -ef` 등으로 확인)를 쓰는 게 헷갈리지 않습니다.
 
 #### 공통 옵션
 
@@ -124,7 +124,7 @@ JAVA_TOOL_OPTIONS="-javaagent:/path/to/macmon-java-agent.jar=socket=/tmp/macmon-
 | `-agent` | `macmon-java-agent.jar` | 주입할 에이전트 jar 경로 |
 | `-endpoint` | — | macmon-server 주소. 비우면 로컬 워터폴 출력만(서버 전송 안 함) |
 | `-sample` | 100 | 샘플링 비율 (1~100%) |
-| `-listen` | — | jattach 없이 소켓 수신만 (Java를 `-javaagent:macmon-java-agent.jar=socket=...`로 직접 시작했을 때). macOS에서는 이 모드만 지원 |
+| `-listen` | — | **정수(int)만 허용.** jattach 없이 소켓 수신만 (Java를 `-javaagent:macmon-java-agent.jar=socket=...`로 직접 시작했을 때). macOS에서는 이 모드만 지원 |
 
 `attacher`는 스팬을 계속 수신·전달하는 **상시 프로세스**입니다 — nohup/systemd로 macmon-agent와 함께 계속 띄워두세요. 중간에 종료하면 그 시점부터 트레이스가 끊깁니다.
 
