@@ -149,8 +149,8 @@ LLM 호출이 **출발하는 호스트**(개발자 PC, 앱 서버, CI 러너)에
 curl -LO https://raw.githubusercontent.com/jinschoilab/macmon-agent-release/main/macmon-llm-proxy-linux-amd64
 chmod +x macmon-llm-proxy-linux-amd64
 
-# 서버 주소는 8280(API 포트), 토큰은 서버의 MACMON_LLM_INGEST_TOKEN과 같은 값
-MACMON_SERVER_URL=http://서버IP:8280 MACMON_LLM_INGEST_TOKEN=<토큰> ./macmon-llm-proxy-linux-amd64
+# 서버 주소는 에이전트와 같은 6600(수집 포트), 토큰은 서버의 MACMON_LLM_INGEST_TOKEN과 같은 값
+MACMON_SERVER_URL=http://서버IP:6600 MACMON_LLM_INGEST_TOKEN=<토큰> ./macmon-llm-proxy-linux-amd64
 ```
 
 기본 수신 주소는 `127.0.0.1:6610`입니다. 클라이언트는 같은 호스트에서 아래처럼 붙습니다.
