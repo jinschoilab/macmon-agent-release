@@ -132,6 +132,59 @@ JAVA_TOOL_OPTIONS="-javaagent:/path/to/macmon-java-agent.jar=socket=/tmp/macmon-
 
 ---
 
+### LLM 게이트웨이 프록시 (별도 바이너리)
+
+Claude Code, Codex CLI, 또는 SDK를 못 끼우는 앱의 LLM API 호출(토큰·캐시·지연·에러·비용)을 macmon `/llm` 화면에 기록합니다.
+LLM 호출이 **출발하는 호스트**(개발자 PC, 앱 서버, CI 러너)에 띄우고, 클라이언트의 base URL만 프록시로 바꿉니다.
+요청·응답·인증 헤더는 그대로 상류(Anthropic/OpenAI)로 통과하며 프록시는 사용량만 서버로 보냅니다.
+
+| 플랫폼 | 바이너리 |
+|--------|----------|
+| Linux (amd64) | `macmon-llm-proxy-linux-amd64` |
+| Linux (arm64) | `macmon-llm-proxy-linux-arm64` |
+| macOS (Apple Silicon) | `macmon-llm-proxy-darwin-arm64` |
+| macOS (Intel) | `macmon-llm-proxy-darwin-amd64` |
+
+```bash
+curl -LO https://raw.githubusercontent.com/jinschoilab/macmon-agent-release/main/macmon-llm-proxy-linux-amd64
+chmod +x macmon-llm-proxy-linux-amd64
+
+# 서버 주소는 8280(API 포트), 토큰은 서버의 MACMON_LLM_INGEST_TOKEN과 같은 값
+MACMON_SERVER_URL=http://서버IP:8280 MACMON_LLM_INGEST_TOKEN=<토큰> ./macmon-llm-proxy-linux-amd64
+```
+
+기본 수신 주소는 `127.0.0.1:6610`입니다. 클라이언트는 같은 호스트에서 아래처럼 붙습니다.
+
+```bash
+# Claude Code — ~/.claude/settings.json 의 env 또는 환경변수
+ANTHROPIC_BASE_URL=http://127.0.0.1:6610/anthropic
+
+# Anthropic SDK 앱
+ANTHROPIC_BASE_URL=http://127.0.0.1:6610/anthropic
+
+# OpenAI SDK 앱 / Codex(API 키): base URL을 아래로
+http://127.0.0.1:6610/openai/v1
+
+# Codex(ChatGPT 로그인) — ~/.codex/config.toml
+chatgpt_base_url = "http://127.0.0.1:6610/chatgpt"
+```
+
+동작 확인: `curl localhost:6610/stats` 의 `calls`가 호출마다 올라가고, 서버 `/llm` 화면에 `claude-code`, `codex` 등 앱 카드가 생깁니다.
+
+| 옵션 (환경변수 / 플래그) | 기본값 | 설명 |
+|------|--------|------|
+| `MACMON_PROXY_LISTEN` / `-listen` | `127.0.0.1:6610` | 수신 주소 |
+| `MACMON_SERVER_URL` / `-server` | — | macmon-server 주소. 비우면 로그만 찍고 전송 안 함 |
+| `MACMON_LLM_INGEST_TOKEN` / `-token` | — | 서버 `/ingest/llm` 토큰 |
+| `MACMON_PROXY_FEATURE` / `-feature` | 호스트명 | 기록의 `feature` 태그 (팀·사람 구분용) |
+| `MACMON_PROXY_LOG_PROMPTS` / `-log-prompts` | off | 프롬프트·응답 텍스트 저장 |
+| `MACMON_PROXY_PRICING` / `-pricing` | — | 모델 단가 덮어쓰기 JSON (`{"openai:gpt-5.6": {"in":3,"out":15}}`) |
+
+프록시는 인증 키가 지나가는 경로이므로 기본은 localhost 전용입니다. 다른 호스트에 열어야 하면 `-listen 0.0.0.0:6610`과 네트워크 접근 제어를 함께 두세요.
+`nohup`/systemd로 macmon-agent와 함께 상시 띄워두세요. 프록시가 내려가면 클라이언트의 LLM 호출도 실패합니다.
+
+---
+
 ## macOS
 
 ```bash
