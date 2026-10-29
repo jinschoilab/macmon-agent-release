@@ -185,6 +185,23 @@ chatgpt_base_url = "http://127.0.0.1:6610/chatgpt"
 
 ---
 
+## 빠른 설치 (권장)
+
+macmon UI → **수집·연동 → 📥 에이전트 설치**에서 프로젝트 키가 채워진 명령을 복사해 실행하세요. 서비스 등록·연결/키 확인·첫 전송 확인까지 자동입니다.
+
+```bash
+# Linux / macOS — 업그레이드는 같은 명령을 키 없이, 제거는 --uninstall
+curl -fsSL http://서버IP:6600/install.sh | sudo bash -s -- --key mpk_xxx
+```
+```powershell
+# Windows (관리자 PowerShell)
+& ([scriptblock]::Create((irm http://서버IP:6600/install.ps1))) -Key mpk_xxx
+```
+
+옵션: `--hostname`, `--proxy http://프록시:포트`(폐쇄망), `--server http://a:6600,http://b:6600`(예비 서버 자동 전환). 아래는 스크립트를 쓸 수 없는 환경을 위한 수동 설치입니다.
+
+---
+
 ## macOS
 
 ```bash
