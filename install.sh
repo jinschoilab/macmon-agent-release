@@ -14,8 +14,14 @@
 #   --hostname <name>    표시 이름 (기본: OS 호스트명)
 #   --proxy <url>        아웃바운드 프록시 (폐쇄망). 예: http://10.0.0.1:3128
 #   --download <url>     바이너리 받을 곳 (기본: 수집 서버 → 실패 시 GitHub)
-#   --no-start           설치만 하고 서비스는 시작하지 않음
-#   --uninstall          서비스·바이너리·설정 제거 (agent ID는 남김, --purge면 함께 제거)
+#   --run service|script 실행 방식 (기본 service)
+#                          service: systemd(Linux)·LaunchDaemon(macOS)에 등록 — 부팅 시 자동 시작, 죽으면 재시작
+#                          script : start.sh/stop.sh만 만들고 기동은 직접 관리(cron 재기동 등). sudo 없이도 가능
+#   --no-auto-update     자동 업데이트 끔. 기본은 켬 — 공개 릴리스에 새 바이너리가 올라오면 받아서 재기동
+#                          service: systemd 타이머가 매일 update.sh 실행 / script: start.sh가 기동 전에 update.sh 실행
+#   --dir <path>         script 방식 설치 위치 (기본: 실행 중인 수동 설치 위치 → ~/macmon)
+#   --no-start           설치만 하고 시작하지 않음
+#   --uninstall          서비스·바이너리·설정 제거 (agent ID는 남김, --purge면 함께 제거). script 방식은 --run script [--dir]
 set -euo pipefail
 
 SERVER="__MACMON_SERVER__"
@@ -25,10 +31,14 @@ HOSTNAME_OPT=""
 PROXY=""
 DOWNLOAD_BASE=""
 NO_START=0
+RUN="service"
+DIR_OPT=""
+AUTO_UPDATE=1
 UNINSTALL=0
 PURGE=0
 # GitHub에서 받은 스크립트는 자리표시자가 그대로 남아 있다 — 서버 주소는 --server·기존 설정으로, 바이너리는 공개 릴리스에서
-case "$SERVER" in __*__) SERVER="" ;; esac
+SCRIPT_BASE=""   # 안내에 찍을 스크립트 출처. 비면 수집 서버(:6600)에서 받은 것
+case "$SERVER" in __*__) SERVER=""; SCRIPT_BASE="https://raw.githubusercontent.com/jinschoilab/macmon-agent-release/main" ;; esac
 case "$FALLBACK_BASE" in __*__) FALLBACK_BASE="https://raw.githubusercontent.com/jinschoilab/macmon-agent-release/main" ;; esac
 
 while [ $# -gt 0 ]; do
@@ -38,10 +48,14 @@ while [ $# -gt 0 ]; do
     --hostname) HOSTNAME_OPT="${2:-}"; shift 2 ;;
     --proxy) PROXY="${2:-}"; shift 2 ;;
     --download) DOWNLOAD_BASE="${2:-}"; shift 2 ;;
+    --run) RUN="${2:-}"; shift 2 ;;
+    --dir) DIR_OPT="${2:-}"; shift 2 ;;
+    --auto-update) AUTO_UPDATE=1; shift ;;
+    --no-auto-update) AUTO_UPDATE=0; shift ;;
     --no-start) NO_START=1; shift ;;
     --uninstall) UNINSTALL=1; shift ;;
     --purge) PURGE=1; shift ;;
-    -h|--help) sed -n '2,18p' "$0" 2>/dev/null || true; exit 0 ;;
+    -h|--help) sed -n '2,25p' "$0" 2>/dev/null || true; exit 0 ;;
     *) echo "알 수 없는 옵션: $1" >&2; exit 2 ;;
   esac
 done
@@ -50,6 +64,19 @@ c_ok()   { printf '\033[32m✔\033[0m %s\n' "$*"; }
 c_warn() { printf '\033[33m!\033[0m %s\n' "$*"; }
 c_err()  { printf '\033[31m✘\033[0m %s\n' "$*" >&2; }
 step()   { printf '\n\033[1m[%s]\033[0m %s\n' "$1" "$2"; }
+case "$RUN" in service|script) ;; *) c_err "--run 은 service 또는 script 입니다: $RUN"; exit 2 ;; esac
+
+# 실행 중인 macmon-agent → "pid 실행파일경로" 목록. 예전 수동 설치는 macmon-agent-linux-amd64 같은 이름 그대로 돌린다
+agent_procs() {
+  for pid in $(pgrep '^macmon-agent' 2>/dev/null); do
+    if [ -e "/proc/$pid/exe" ]; then
+      exe="$(readlink "/proc/$pid/exe" 2>/dev/null | sed 's/ (deleted)$//' || true)"   # d.sh처럼 rm 후 재다운로드했으면 (deleted)
+    else
+      exe="$(lsof -a -p "$pid" -d txt -Fn 2>/dev/null | sed -n 's/^n//p' | head -n 1 || true)"
+    fi
+    echo "$pid $exe"
+  done
+}
 
 OS="$(uname -s)"
 ARCH="$(uname -m)"
@@ -65,14 +92,31 @@ case "$OS" in
     ;;
   *) c_err "지원하지 않는 OS: $OS (Windows는 install.ps1 사용)"; exit 1 ;;
 esac
-BIN="$INSTALL_DIR/macmon-agent"
-CONF="$INSTALL_DIR/macmon-agent.conf"
 UNIT="/etc/systemd/system/macmon-agent.service"
-
-if [ "$(id -u)" -ne 0 ]; then
-  c_err "root 권한이 필요합니다. 명령 앞에 sudo를 붙여 주세요 (… | sudo bash -s -- …)"
+UPD_UNIT="/etc/systemd/system/macmon-agent-update.service"
+UPD_TIMER="/etc/systemd/system/macmon-agent-update.timer"
+RUN_USER="$(id -un)"
+if [ "$RUN" = "script" ]; then
+  # 기동 스크립트 방식: sudo로 실행했으면 원래 사용자 소유·권한으로 설치하고 돌린다 (예전 ~/macmon 수동 설치와 같은 모양)
+  [ "$(id -u)" -eq 0 ] && [ -n "${SUDO_USER:-}" ] && RUN_USER="$SUDO_USER"
+  RUN_HOME="$(eval echo ~"$RUN_USER")"
+  if [ -z "$DIR_OPT" ]; then   # 지금 돌고 있는 수동 설치가 있으면 그 자리에 덮어쓴다 (cron이 부르는 start.sh 경로 유지)
+    DIR_OPT="$(agent_procs | awk '{print $2}' | grep -v '^/opt/macmon-agent/\|^/usr/local/macmon-agent/' | grep . | head -n 1 | xargs -r dirname 2>/dev/null || true)"
+  fi
+  INSTALL_DIR="${DIR_OPT:-$RUN_HOME/macmon}"
+  INSTALL_DIR="${INSTALL_DIR%/}"
+  LOG_FILE="$INSTALL_DIR/macmon-agent.log"
+elif [ "$(id -u)" -ne 0 ]; then
+  c_err "root 권한이 필요합니다. 명령 앞에 sudo를 붙여 주세요 (… | sudo bash -s -- …). sudo 없이 설치하려면 --run script"
   exit 1
 fi
+BIN="$INSTALL_DIR/macmon-agent"
+CONF="$INSTALL_DIR/macmon-agent.conf"
+run_as() { # run_as <cmd…>: script 방식 실행 사용자로
+  if [ "$(id -u)" -eq 0 ] && [ "$RUN_USER" != "root" ]; then
+    if have sudo; then sudo -u "$RUN_USER" -H "$@"; else su -s /bin/sh "$RUN_USER" -c "$(printf '%q ' "$@")"; fi
+  else "$@"; fi
+}
 
 have() { command -v "$1" >/dev/null 2>&1; }
 fetch() { # fetch <url> <out>
@@ -85,7 +129,10 @@ fetch_stdout() { # fetch_stdout <url> [header]
 }
 
 stop_service() {
-  if [ "$OS" = "Linux" ] && have systemctl; then
+  if [ "$RUN" = "script" ]; then   # 이 위치에서 돌던 에이전트만 끈다
+    pids="$(agent_procs | awk -v b="$BIN" '$2 == b {print $1}')"
+    if [ -n "$pids" ]; then kill $pids 2>/dev/null || true; sleep 2; kill -9 $pids 2>/dev/null || true; fi
+  elif [ "$OS" = "Linux" ] && have systemctl; then
     systemctl stop macmon-agent 2>/dev/null || true
   elif [ "$OS" = "Darwin" ]; then
     launchctl bootout system "$PLIST" 2>/dev/null || launchctl unload "$PLIST" 2>/dev/null || true
@@ -96,9 +143,11 @@ stop_service() {
 if [ "$UNINSTALL" = 1 ]; then
   step 1/2 "서비스 중지·등록 해제"
   stop_service
-  if [ "$OS" = "Linux" ]; then
-    if have systemctl; then systemctl disable macmon-agent 2>/dev/null || true; fi
-    rm -f "$UNIT"; have systemctl && systemctl daemon-reload || true
+  if [ "$RUN" = "script" ]; then
+    :   # 등록된 서비스 없음 — cron 등 직접 걸어 둔 기동은 사용자가 정리
+  elif [ "$OS" = "Linux" ]; then
+    if have systemctl; then systemctl disable macmon-agent 2>/dev/null || true; systemctl disable --now macmon-agent-update.timer 2>/dev/null || true; fi
+    rm -f "$UNIT" "$UPD_UNIT" "$UPD_TIMER" "$INSTALL_DIR/restart.sh"; have systemctl && systemctl daemon-reload || true
   else
     rm -f "$PLIST"
   fi
@@ -106,7 +155,10 @@ if [ "$UNINSTALL" = 1 ]; then
   step 2/2 "파일 삭제"
   # agent ID는 바이너리 옆(.macmon-agent.id)에 있다 — 남겨 두면 재설치 시 같은 호스트로 이어진다
   ID_FILE="$INSTALL_DIR/.macmon-agent.id"
-  if [ "$PURGE" = 1 ] || [ ! -f "$ID_FILE" ]; then
+  if [ "$RUN" = "script" ]; then   # 사용자 디렉토리 — 우리가 만든 파일만 지운다
+    rm -f "$BIN" "$CONF" "$LOG_FILE" "$INSTALL_DIR/start.sh" "$INSTALL_DIR/stop.sh" "$INSTALL_DIR/update.sh"
+    [ "$PURGE" = 1 ] && rm -f "$ID_FILE"
+  elif [ "$PURGE" = 1 ] || [ ! -f "$ID_FILE" ]; then
     rm -rf "$INSTALL_DIR"
   else
     find "$INSTALL_DIR" -mindepth 1 ! -name .macmon-agent.id -exec rm -rf {} + 2>/dev/null || true
@@ -137,7 +189,9 @@ case "$OS/$ARCH" in
 esac
 have curl || have wget || { c_err "curl 또는 wget이 필요합니다"; exit 1; }
 c_ok "$OS $ARCH → $ASSET"
-if [ "$OS" = "Linux" ] && ! have systemctl; then
+if [ "$RUN" = "script" ]; then
+  c_ok "실행 방식: 기동 스크립트 ($INSTALL_DIR/start.sh, 실행 사용자 $RUN_USER)"
+elif [ "$OS" = "Linux" ] && ! have systemctl; then
   c_warn "systemd가 없습니다 — 바이너리·설정만 설치하고 서비스 등록은 건너뜁니다"
 fi
 
@@ -199,41 +253,57 @@ stop_service
 # 홈만 봐서는 못 찾고, 그대로 두면 새 서비스와 둘이 동시에 전송한다
 LEGACY_PIDS=""
 LEGACY_DIRS=""
-for pid in $(pgrep -x macmon-agent 2>/dev/null); do
-  if [ -e "/proc/$pid/exe" ]; then
-    exe="$(readlink "/proc/$pid/exe" 2>/dev/null | sed 's/ (deleted)$//' || true)"   # d.sh처럼 rm 후 재다운로드했으면 (deleted)
-  else
-    exe="$(lsof -a -p "$pid" -d txt -Fn 2>/dev/null | sed -n 's/^n//p' | head -n 1 || true)"
-  fi
+while read -r pid exe; do
+  [ -n "$pid" ] || continue
   [ "$exe" = "$BIN" ] && continue
   LEGACY_PIDS="$LEGACY_PIDS $pid"
   [ -n "$exe" ] && LEGACY_DIRS="$LEGACY_DIRS $(dirname "$exe")"
-done
+done <<EOF_PROCS
+$(agent_procs)
+EOF_PROCS
 LEGACY_HOMES="${SUDO_USER:+$(eval echo ~"$SUDO_USER")} $(eval echo ~root)"
 for h in $LEGACY_HOMES; do LEGACY_DIRS="$LEGACY_DIRS $h/macmon"; done   # 멈춰 있는 수동 설치(README 경로)
 if [ -n "$LEGACY_PIDS" ]; then
   kill $LEGACY_PIDS 2>/dev/null || true
   sleep 2
   kill -9 $LEGACY_PIDS 2>/dev/null || true
-  c_ok "수동 실행 중이던 에이전트 종료 (PID:$LEGACY_PIDS)"
-  for h in $LEGACY_HOMES; do
-    if crontab -l -u "$(basename "$h")" 2>/dev/null | grep -q macmon-agent; then
-      c_warn "crontab($(basename "$h"))에 macmon-agent 항목이 있습니다 — 지우지 않으면 재부팅 때 수동 에이전트가 다시 뜹니다"
-    fi
-  done
+  c_ok "다른 위치에서 실행 중이던 에이전트 종료 (PID:$LEGACY_PIDS)"
 fi
+# 방식 전환: script로 바꾸면 기존 서비스 등록을 내린다 (둘이 같이 돌면 이중 전송)
+if [ "$RUN" = "script" ] && [ "$(id -u)" -eq 0 ]; then
+  if [ "$OS" = "Linux" ] && [ -f "$UNIT" ]; then
+    systemctl disable --now macmon-agent 2>/dev/null || true; rm -f "$UNIT"; systemctl daemon-reload 2>/dev/null || true
+    c_ok "기존 systemd 서비스 해제 (기동 스크립트 방식으로 전환)"
+  elif [ "$OS" = "Darwin" ] && [ -f "$PLIST" ]; then
+    launchctl bootout system "$PLIST" 2>/dev/null || launchctl unload "$PLIST" 2>/dev/null || true; rm -f "$PLIST"
+    c_ok "기존 LaunchDaemon 해제 (기동 스크립트 방식으로 전환)"
+  fi
+fi
+# 예전 수동 설치를 cron으로 (재)기동하고 있으면 알린다 — 손대지는 않는다(사용자 cron). service 방식이면
+# 그 cron이 예전 에이전트를 다시 띄워 이중 전송하므로 바꿔야 하고, script 방식으로 같은 위치에 깔면 start.sh가 새것으로 바뀌어 그대로 동작한다
+for u in $(for h in $LEGACY_HOMES; do basename "$h"; done | sort -u); do
+  CRON_HITS="$(crontab -l -u "$u" 2>/dev/null | grep -v '^[[:space:]]*#' | grep -E 'macmon-agent|macmon/start\.sh|macmon[[:space:]]*(&&|;)[[:space:]]*(\./)?start\.sh' || true)"
+  [ -n "$CRON_HITS" ] || continue
+  c_warn "crontab($u)에 예전 에이전트 기동 항목이 있습니다:"
+  printf '%s\n' "$CRON_HITS" | sed 's/^/      /'
+  if [ "$RUN" = "service" ]; then
+    echo "      → 그대로 두면 예전 에이전트가 다시 떠서 이중 전송됩니다. 그 줄을 지우세요 (자동 업데이트는 이제 타이머가 합니다)"
+  fi
+done
 mkdir -p "$INSTALL_DIR"
-install -m 0755 "$TMP/$ASSET" "$BIN"
+install -m 0755 "$TMP/$ASSET" "$BIN.new" && mv -f "$BIN.new" "$BIN"   # 실행 중 파일 덮어쓰기(Text file busy) 회피
 # 기존 agent ID를 이어받는다 — 새 UUID가 생겨 같은 호스트가 둘로 보이는 것 방지. 에이전트와 같은 우선순위(바이너리 옆 → 홈)
 if [ ! -f "$INSTALL_DIR/.macmon-agent.id" ]; then
   for f in $(for d in $LEGACY_DIRS; do echo "$d/.macmon-agent.id"; done) $(for h in $LEGACY_HOMES; do echo "$h/.macmon-agent.id"; done); do
+    [ "$f" = "$INSTALL_DIR/.macmon-agent.id" ] && continue
     if [ -s "$f" ]; then cp "$f" "$INSTALL_DIR/.macmon-agent.id"; c_ok "기존 agent ID 이어받음 ($f)"; break; fi
   done
 fi
 # 처음 설치인데 수동 설치 설정 파일이 있으면 그걸 바탕으로 한다 (hostname·DB 수집·api_key 등 보존, server·키만 아래에서 갱신)
 if [ "$UPGRADE" = 0 ]; then
   for f in $(for d in $LEGACY_DIRS; do echo "$d/macmon-agent.conf"; done) $(for h in $LEGACY_HOMES; do echo "$h/.macmon-agent.conf"; done); do
-    if [ -s "$f" ]; then cp "$f" "$CONF"; UPGRADE=1; c_ok "기존 설정 이어받음 ($f)"; break; fi
+    [ "$f" = "$CONF" ] && continue
+    if [ -s "$f" ]; then cp "$f" "$CONF"; UPGRADE=1; MIGRATED=1; c_ok "기존 설정 이어받음 ($f)"; break; fi
   done
 fi
 [ "$OS" = "Darwin" ] && xattr -d com.apple.quarantine "$BIN" 2>/dev/null || true
@@ -260,8 +330,86 @@ else
 fi
 [ -n "$HOSTNAME_OPT" ] && conf_set hostname "$HOSTNAME_OPT"
 [ -n "$PROXY" ] && conf_set proxy "$PROXY"
-chmod 600 "$CONF"   # 키가 들어 있으므로 root만 읽기
+chmod 600 "$CONF"   # 키가 들어 있으므로 소유자만 읽기 (service 방식은 root)
 
+# update.sh — 최신 바이너리를 받아 바뀌었을 때만 교체·재기동 (자동 업데이트 타이머·start.sh·수동 실행 공용)
+if [ "$RUN" = "script" ]; then RESTART_CMD='./start.sh --no-update'
+elif [ "$OS" = "Linux" ]; then RESTART_CMD='systemctl restart macmon-agent'
+else RESTART_CMD='launchctl kickstart -k system/io.macmon.agent'; fi
+cat > "$INSTALL_DIR/update.sh" <<EOF
+#!/bin/sh
+# macmon-agent 설치 스크립트가 생성 — 최신 바이너리를 받아 바뀌었으면 교체 후 재기동. --no-restart면 교체만
+cd "\$(dirname "\$0")" || exit 1
+ASSET="$ASSET"
+BASES="${DOWNLOAD_BASE:-$PRIMARY/download} $FALLBACK_BASE"
+PROXY="$PROXY"
+log() { echo "\$(date '+%Y-%m-%d %H:%M:%S') [update] \$*" | tee -a ./update.log; }
+tmp=./macmon-agent.download
+rm -f "\$tmp"
+for b in \$BASES; do
+  if command -v curl >/dev/null 2>&1; then
+    curl -fsSL --connect-timeout 10 --max-time 300 \${PROXY:+--proxy "\$PROXY"} -o "\$tmp" "\$b/\$ASSET" 2>/dev/null
+  else
+    wget -q -T 10 -O "\$tmp" "\$b/\$ASSET" 2>/dev/null
+  fi
+  [ -s "\$tmp" ] && break
+  rm -f "\$tmp"
+done
+[ -s "\$tmp" ] || { log "다운로드 실패 — 기존 바이너리 유지"; exit 1; }
+if cmp -s "\$tmp" ./macmon-agent; then rm -f "\$tmp"; log "최신 상태"; exit 0; fi
+chmod 755 "\$tmp" && mv -f "\$tmp" ./macmon-agent
+log "새 바이너리로 교체"
+[ "\${1:-}" = "--no-restart" ] && exit 0
+$RESTART_CMD
+EOF
+chmod 755 "$INSTALL_DIR/update.sh"
+if [ "$RUN" = "service" ]; then
+  # restart.sh — cron 재기동용: 새 릴리스 반영(AUTO_UPDATE=1) 후 서비스 재시작. 예전 ~/macmon/start.sh를 cron에 걸던 자리에 그대로 쓴다
+  cat > "$INSTALL_DIR/restart.sh" <<EOF
+#!/bin/sh
+# macmon-agent 설치 스크립트가 생성 — 최신 바이너리 반영(AUTO_UPDATE=1) 후 서비스 재시작. root로 실행 (sudo crontab -e)
+AUTO_UPDATE=$AUTO_UPDATE
+cd "\$(dirname "\$0")" || exit 1
+[ "\$AUTO_UPDATE" = 1 ] && ./update.sh --no-restart
+$RESTART_CMD && echo "\$(date '+%Y-%m-%d %H:%M:%S') macmon-agent 재시작" | tee -a ./update.log
+EOF
+  chmod 755 "$INSTALL_DIR/restart.sh"
+fi
+
+if [ "$RUN" = "script" ]; then
+step 5/6 "기동 스크립트"
+  # cron이 이미 이 경로의 start.sh를 부르고 있을 수 있다 — 같은 이름·같은 역할로 덮어쓰고 원본은 .bak으로 남긴다
+  [ -f "$INSTALL_DIR/start.sh" ] && ! grep -q "macmon-agent 설치 스크립트가 생성" "$INSTALL_DIR/start.sh" && cp "$INSTALL_DIR/start.sh" "$INSTALL_DIR/start.sh.bak"
+  cat > "$INSTALL_DIR/start.sh" <<'EOF'
+#!/bin/sh
+# macmon-agent 설치 스크립트가 생성 — (재)기동: 최신 바이너리 확인(AUTO_UPDATE=1) → 이 위치의 에이전트를 내리고 다시 띄운다.
+# cron에 그대로 걸면 업데이트 반영 + 재기동이 된다. --no-update면 업데이트 확인 없이 재기동만
+AUTO_UPDATE=__AUTO_UPDATE__
+cd "$(dirname "$0")" || exit 1
+[ "$AUTO_UPDATE" = 1 ] && [ "${1:-}" != "--no-update" ] && ./update.sh --no-restart
+"./stop.sh"
+nohup ./macmon-agent >> ./macmon-agent.log 2>&1 &
+echo "macmon-agent started (pid $!)"
+EOF
+  cat > "$INSTALL_DIR/stop.sh" <<'EOF'
+#!/bin/sh
+# macmon-agent 설치 스크립트가 생성 — 이 위치의 macmon-agent만 종료
+cd "$(dirname "$0")" || exit 1
+BIN="$(pwd)/macmon-agent"
+pids="$(pgrep -f "^$BIN( |$)|^\./macmon-agent( |$)" 2>/dev/null)"
+[ -z "$pids" ] && exit 0
+kill $pids 2>/dev/null
+i=0; while [ $i -lt 10 ] && kill -0 $pids 2>/dev/null; do sleep 1; i=$((i + 1)); done
+kill -9 $pids 2>/dev/null
+exit 0
+EOF
+  sed -i.tmp "s/__AUTO_UPDATE__/$AUTO_UPDATE/" "$INSTALL_DIR/start.sh" && rm -f "$INSTALL_DIR/start.sh.tmp"
+  chmod 755 "$INSTALL_DIR/start.sh" "$INSTALL_DIR/stop.sh"
+  [ "$(id -u)" -eq 0 ] && chown -R "$RUN_USER" "$INSTALL_DIR"
+  c_ok "start.sh / stop.sh / update.sh: $INSTALL_DIR (부팅 시 자동 시작 없음 — cron 등으로 직접 관리)"
+  [ "$AUTO_UPDATE" = 1 ] && c_ok "자동 업데이트: start.sh가 기동할 때마다 최신 바이너리 확인"
+  [ -f "$INSTALL_DIR/start.sh.bak" ] && c_ok "기존 start.sh는 start.sh.bak으로 보관"
+else
 step 5/6 "서비스 등록"
 if [ "$OS" = "Linux" ] && have systemctl; then
   cat > "$UNIT" <<EOF
@@ -285,9 +433,39 @@ MemoryMax=300M
 [Install]
 WantedBy=multi-user.target
 EOF
+  if [ "$AUTO_UPDATE" = 1 ]; then
+    cat > "$UPD_UNIT" <<EOF
+[Unit]
+Description=macmon agent auto update
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=$INSTALL_DIR/update.sh
+EOF
+    cat > "$UPD_TIMER" <<EOF
+[Unit]
+Description=macmon agent auto update (daily)
+
+[Timer]
+OnCalendar=*-*-* 04:00:00
+RandomizedDelaySec=30min
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+EOF
+  else
+    systemctl disable --now macmon-agent-update.timer 2>/dev/null || true
+    rm -f "$UPD_UNIT" "$UPD_TIMER"
+  fi
   systemctl daemon-reload
   systemctl enable macmon-agent >/dev/null 2>&1
   c_ok "systemd 유닛: $UNIT (부팅 시 자동 시작, 비정상 종료 시 5초 후 재시작)"
+  if [ "$AUTO_UPDATE" = 1 ]; then
+    systemctl enable --now macmon-agent-update.timer >/dev/null 2>&1
+    c_ok "자동 업데이트: 매일 04시 전후 update.sh (systemctl list-timers macmon-agent-update.timer)"
+  fi
 elif [ "$OS" = "Darwin" ]; then
   cat > "$PLIST" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
@@ -305,6 +483,8 @@ elif [ "$OS" = "Darwin" ]; then
 EOF
   chmod 644 "$PLIST"
   c_ok "LaunchDaemon: $PLIST (부팅 시 자동 시작, 종료 시 재시작)"
+  [ "$AUTO_UPDATE" = 1 ] && c_warn "macOS 자동 업데이트는 직접 걸어 주세요: sudo crontab -e → 0 4 * * * $INSTALL_DIR/update.sh"
+fi
 fi
 
 step 6/6 "시작·첫 전송 확인"
@@ -312,7 +492,10 @@ if [ "$NO_START" = 1 ]; then
   c_warn "--no-start: 서비스를 시작하지 않았습니다"
 else
   : > "$LOG_FILE"
-  if [ "$OS" = "Linux" ] && have systemctl; then
+  if [ "$RUN" = "script" ]; then
+    [ "$(id -u)" -eq 0 ] && chown "$RUN_USER" "$LOG_FILE"
+    run_as "$INSTALL_DIR/start.sh" >/dev/null
+  elif [ "$OS" = "Linux" ] && have systemctl; then
     systemctl restart macmon-agent
   elif [ "$OS" = "Darwin" ]; then
     launchctl bootstrap system "$PLIST" 2>/dev/null || launchctl load -w "$PLIST"
@@ -335,7 +518,9 @@ else
   fi
 fi
 
-if [ "$UPGRADE" = 1 ]; then ACTION="업그레이드"; else ACTION="설치"; fi
+if [ "${MIGRATED:-0}" = 1 ]; then ACTION="재설치 (기존 수동 설치에서 이전)"
+elif [ "$UPGRADE" = 1 ]; then ACTION="업그레이드"; else ACTION="설치"; fi
+SCRIPT_BASE="${SCRIPT_BASE:-$PRIMARY}"
 cat <<EOF
 
 ────────────────────────────────────────────
@@ -346,12 +531,24 @@ cat <<EOF
    설정      $CONF
    로그      $LOG_FILE
 EOF
-if [ "$OS" = "Linux" ]; then
+if [ "$RUN" = "script" ]; then
+cat <<EOF
+   기동      $INSTALL_DIR/start.sh   (재기동 겸용 — cron에 그대로 걸면 됨)
+   중지      $INSTALL_DIR/stop.sh
+ 관리
+   업데이트  $INSTALL_DIR/update.sh   (받아서 바뀌었으면 교체·재기동)
+   부팅 시 자동 시작은 없습니다. 필요하면 crontab -e 에 예:
+     @reboot $INSTALL_DIR/start.sh
+     0 4 * * * $INSTALL_DIR/start.sh
+EOF
+elif [ "$OS" = "Linux" ]; then
 cat <<EOF
    서비스    $UNIT
  관리
    상태      systemctl status macmon-agent
    재시작    sudo systemctl restart macmon-agent   (설정 수정 후)
+   업데이트  sudo $INSTALL_DIR/update.sh   (자동: $([ "$AUTO_UPDATE" = 1 ] && echo "매일 04시 타이머" || echo "꺼짐"))
+   cron 재기동 sudo crontab -e → 0 4 * * * $INSTALL_DIR/restart.sh   (새 버전 반영 + 재시작)
 EOF
 else
 cat <<EOF
@@ -362,7 +559,9 @@ cat <<EOF
    GPU/전력  sudoers에 NOPASSWD powermetrics 추가 시 수집 (UI → 에이전트 설정 참고)
 EOF
 fi
+if [ "$RUN" = "script" ]; then RUN_ARGS=" --run script --dir $INSTALL_DIR"; else RUN_ARGS=""; fi
+[ "$AUTO_UPDATE" = 0 ] && RUN_ARGS="$RUN_ARGS --no-auto-update"
 cat <<EOF
-   업그레이드 curl -fsSL $PRIMARY/install.sh | sudo bash
-   제거      curl -fsSL $PRIMARY/install.sh | sudo bash -s -- --uninstall
+   업그레이드 curl -fsSL $SCRIPT_BASE/install.sh | sudo bash -s --$RUN_ARGS
+   제거      curl -fsSL $SCRIPT_BASE/install.sh | sudo bash -s -- --uninstall$RUN_ARGS
 EOF
