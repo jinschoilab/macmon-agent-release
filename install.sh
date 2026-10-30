@@ -562,6 +562,6 @@ fi
 if [ "$RUN" = "script" ]; then RUN_ARGS=" --run script --dir $INSTALL_DIR"; else RUN_ARGS=""; fi
 [ "$AUTO_UPDATE" = 0 ] && RUN_ARGS="$RUN_ARGS --no-auto-update"
 cat <<EOF
-   업그레이드 curl -fsSL $SCRIPT_BASE/install.sh | sudo bash -s --$RUN_ARGS
+   업그레이드 curl -fsSL $SCRIPT_BASE/install.sh | sudo bash${RUN_ARGS:+ -s --$RUN_ARGS}
    제거      curl -fsSL $SCRIPT_BASE/install.sh | sudo bash -s -- --uninstall$RUN_ARGS
 EOF
